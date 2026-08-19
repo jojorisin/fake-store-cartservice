@@ -1,6 +1,8 @@
 package se.jensen.johanna.fakestorecartservice.service;
 
 import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.oauth2.jwt.Jwt;
@@ -11,7 +13,6 @@ import se.jensen.johanna.fakestorecartservice.dto.CartRequest;
 import se.jensen.johanna.fakestorecartservice.dto.CartResponse;
 import se.jensen.johanna.fakestorecartservice.mapper.CartMapper;
 import se.jensen.johanna.fakestorecartservice.model.Cart;
-import se.jensen.johanna.fakestorecartservice.model.CartItem;
 import se.jensen.johanna.fakestorecartservice.repository.CartRepository;
 
 @Service
@@ -24,57 +25,65 @@ public class CartService {
 
   @Transactional
   public CartResponse getCart(Jwt jwt, String sessionId) {
-    Cart cart;
-    boolean needsMerge = jwt != null && sessionId != null;
-    if (needsMerge) {
-      cart = mergeAndGetCart(jwt, sessionId);
-    } else {
-      String activeSession = jwt != null ? jwt.getSubject() : sessionId;
-      if (activeSession == null) {
-        log.debug("controller returned null session id.");
-        throw new IllegalStateException("No session id found");
-      }
-      cart = cartRepository.findById(activeSession)
-          .orElse(Cart.createCart(activeSession));
-    }
-    cartRepository.save(cart);
-    List<CartItemDTO> cartItemDTOS = cart.getCartItems().stream().map(cartMapper::toCartItemDTO)
+    Cart cartToReturn = getOrCreateCart(jwt, sessionId).orElseThrow(() -> {
+      log.error("no cartId found");
+      return new RuntimeException("no cartId found");
+    });
+    List<CartItemDTO> cartItemDTOS = cartToReturn.getCartItems().stream()
+        .map(cartMapper::toCartItemDTO)
         .toList();
 
     return new CartResponse(cartItemDTOS);
   }
 
+
   @Transactional
   public void addToCart(Jwt jwt, String sessionId, CartRequest cartRequest) {
-    // if the user has logged in, update the cart-key to userid.
-    log.debug("adding item to cart {}", cartRequest);
-    Cart cart;
-    boolean needsMerge = jwt != null && sessionId != null;
-    if (needsMerge) {
-      cart = mergeAndGetCart(jwt, sessionId);
-    } else {
-      sessionId = jwt != null ? jwt.getSubject() : sessionId;
-      log.debug("jwt is null, sessionId is {}", sessionId);
-      if (sessionId == null) {
-        //controller should have produced new sessionId
-        log.error("sessionId is null");
-        throw new IllegalStateException("No session id found");
-      }
-      cart = cartRepository.findById(sessionId).orElse(Cart.createCart(sessionId));
-    }
-    CartItem item = cartMapper.toCartItem(cartRequest);
-    cart.addItem(item);
+    Cart cart = getOrCreateCart(jwt, sessionId).orElseThrow(() -> {
+      log.error("no cartId found");
+      return new RuntimeException("no cartId found");
+    });
+    cart.addItem(cartMapper.toCartItem(cartRequest));
     cartRepository.save(cart);
   }
 
+  @Transactional
+  public Optional<Cart> getOrCreateCart(Jwt jwt, String sessionId) {
+    String userId = jwt != null ? jwt.getSubject() : null;
+    String guestId = sessionId != null && !sessionId.isBlank() ? sessionId : null;
 
-  private Cart mergeAndGetCart(Jwt jwt, String sessionId) {
-    log.debug("merging cart for user {}", jwt.getSubject());
-    Cart cart = cartRepository.findById(sessionId).orElse(Cart.createCart(sessionId));
-    cart.mergeCart(jwt.getSubject());
-    cartRepository.save(cart);
-    log.debug("successfully merged cart for user {}", jwt.getSubject());
-    return cart;
+    Cart cartToReturn;
+    if (userId != null && guestId != null) {
+      cartToReturn = mergeCart(jwt, sessionId);
+    } else if (userId != null) {
+      cartToReturn = cartRepository.findById(userId).orElseGet(() -> Cart.createCart(userId));
+    } else if (guestId != null) {
+      cartToReturn = cartRepository.findById(guestId).orElseGet(() -> Cart.createCart(guestId));
+    } else {
+      return Optional.empty();
+    }
+    return Optional.of(cartToReturn);
+  }
+
+
+  @Transactional
+  public Cart mergeCart(Jwt jwt, String sessionId) {
+    String userId = Objects.requireNonNull(jwt.getSubject());
+
+    Cart userCart = cartRepository.findById(userId)
+        .orElseGet(() -> Cart.createCart(jwt.getSubject()));
+
+    if (sessionId == null || sessionId.isBlank()) {
+      return userCart;
+    }
+
+    cartRepository.findById(sessionId).ifPresent(guestCart -> {
+      userCart.mergeCart(guestCart.getCartItems());
+      cartRepository.save(userCart);
+      cartRepository.deleteById(sessionId);
+    });
+
+    return userCart;
   }
 
 }

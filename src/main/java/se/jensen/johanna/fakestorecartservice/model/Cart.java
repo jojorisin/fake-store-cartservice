@@ -13,7 +13,7 @@ import org.springframework.data.redis.core.RedisHash;
 public class Cart {
 
   @Id
-  private String sessionId;
+  private String cartId;
   private List<CartItem> cartItems;
 
   public void addItem(CartItem newItem) {
@@ -25,10 +25,10 @@ public class Cart {
   }
 
   public static Cart createCart(String sessionId) {
-    return Cart.builder().sessionId(sessionId).cartItems(new ArrayList<>()).build();
+    return Cart.builder().cartId(sessionId).cartItems(new ArrayList<>()).build();
   }
 
-  public void mergeCart(String userId) {
-    this.sessionId = userId;
+  public void mergeCart(List<CartItem> itemsToMerge) {
+    cartItems.addAll(itemsToMerge);
   }
 }
