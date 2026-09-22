@@ -1,0 +1,12 @@
+package se.jensen.johanna.fakestorecartservice.exception;
+
+public abstract class DomainException extends RuntimeException {
+
+  private final ErrorCode errorCode;
+
+  public DomainException(String message, ErrorCode errorCode) {
+    super(message);
+    this.errorCode = errorCode;
+  }
+
+}

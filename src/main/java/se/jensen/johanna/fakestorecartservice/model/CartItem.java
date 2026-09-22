@@ -1,6 +1,5 @@
 package se.jensen.johanna.fakestorecartservice.model;
 
-import java.math.BigDecimal;
 import java.util.UUID;
 import lombok.Builder;
 import lombok.Getter;
@@ -13,10 +12,10 @@ public class CartItem {
 
   private UUID productId;
   private Integer quantity;
-  private BigDecimal price;
 
-  public static CartItem createCartItem(UUID productId, Integer quantity, BigDecimal price) {
-    return CartItem.builder().productId(productId).quantity(quantity).price(price).build();
+
+  public static CartItem createCartItem(UUID productId, Integer quantity) {
+    return CartItem.builder().productId(productId).quantity(quantity).build();
   }
 
 }
