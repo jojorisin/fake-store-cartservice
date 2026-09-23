@@ -78,9 +78,6 @@ public class CartService {
 
   /**
    * Validates product exists and adds to cart
-   *
-   * @param jwt
-   * @param request
    */
   public void addToCart(Jwt jwt, CartRequest request) {
     log.debug("adding to cart. cartItems:{}", request);
