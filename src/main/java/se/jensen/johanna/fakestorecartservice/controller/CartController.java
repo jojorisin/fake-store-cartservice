@@ -1,5 +1,6 @@
 package se.jensen.johanna.fakestorecartservice.controller;
 
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -19,30 +20,24 @@ import se.jensen.johanna.fakestorecartservice.service.CartService;
 @RequiredArgsConstructor
 public class CartController {
 
-
   private final CartService cartService;
 
-  // endpoint to save cart?
-
-  // optional jwt? when checkingout it's needed. add findby cartsession..?
   @GetMapping
   public ResponseEntity<CartResponse> getCart(
       @AuthenticationPrincipal Jwt jwt) {
-
     return ResponseEntity.ok(cartService.getCart(jwt));
   }
 
   @PostMapping
   public ResponseEntity<Void> addToCart(
-      @AuthenticationPrincipal Jwt jwt, @RequestBody CartRequest cartRequest) {
+      @AuthenticationPrincipal Jwt jwt, @RequestBody @Valid CartRequest cartRequest) {
     cartService.addToCart(jwt, cartRequest);
-
     return ResponseEntity.ok().build();
   }
 
   @PostMapping("/merge")
   public ResponseEntity<Void> mergeCart(@AuthenticationPrincipal Jwt jwt,
-      @RequestBody MergeRequest request) {
+      @RequestBody @Valid MergeRequest request) {
     cartService.mergeCart(jwt, request);
     return ResponseEntity.ok().build();
   }

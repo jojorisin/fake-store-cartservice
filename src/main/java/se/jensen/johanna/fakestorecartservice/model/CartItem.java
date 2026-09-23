@@ -13,9 +13,4 @@ public class CartItem {
   private UUID productId;
   private Integer quantity;
 
-
-  public static CartItem createCartItem(UUID productId, Integer quantity) {
-    return CartItem.builder().productId(productId).quantity(quantity).build();
-  }
-
 }
