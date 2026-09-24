@@ -13,6 +13,9 @@ public class ClientConfig {
   @Value("${product-service-url}")
   private String productServiceBaseUrl;
 
+  @Value("${inventory-service-url}")
+  private String inventoryServiceBaseUrl;
+
   @Bean
   ProductClient productClient(RestClient.Builder builder) {
     RestClient restClient = builder.baseUrl(productServiceBaseUrl).build();
@@ -21,6 +24,16 @@ public class ClientConfig {
             .build();
 
     return factory.createClient(ProductClient.class);
+  }
+
+  @Bean
+  InventoryClient inventoryClient(RestClient.Builder builder) {
+    RestClient restClient = builder.baseUrl(inventoryServiceBaseUrl).build();
+    HttpServiceProxyFactory factory =
+        HttpServiceProxyFactory.builderFor(RestClientAdapter.create(restClient))
+            .build();
+
+    return factory.createClient(InventoryClient.class);
   }
 
 
