@@ -12,7 +12,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClientException;
+import se.jensen.johanna.fakestorecartservice.client.InventoryClient;
 import se.jensen.johanna.fakestorecartservice.client.ProductClient;
+import se.jensen.johanna.fakestorecartservice.dto.AvailabilityRequest;
+import se.jensen.johanna.fakestorecartservice.dto.AvailabilityResponse;
 import se.jensen.johanna.fakestorecartservice.dto.CartItemDTO;
 import se.jensen.johanna.fakestorecartservice.dto.CartRequest;
 import se.jensen.johanna.fakestorecartservice.dto.CartResponse;
@@ -34,6 +37,7 @@ public class CartService {
   private final CartRepository cartRepository;
   private final CartMapper cartMapper;
   private final ProductClient productClient;
+  private final InventoryClient inventoryClient;
 
 
   public CartResponse getCart(Jwt jwt) {
@@ -59,21 +63,56 @@ public class CartService {
     // for old carts that could however not be sufficient
     if (products.size() != cartItemsMap.size()) {
       log.debug("unable to validate all ids. request {}, response: {}", cartItemsMap, products);
-      List<UUID> invalidItems = cartItemsMap.keySet().stream()
+      Set<UUID> invalidItems = cartItemsMap.keySet().stream()
           .filter(id -> products.stream().noneMatch(
-              p -> p.productId().equals(id))).toList();
+              p -> p.productId().equals(id))).collect(Collectors.toSet());
 
       invalidItems.forEach(cart::removeItem);
       cartRepository.save(cart);
       isUpdated = true;
     }
-    // returning only validated existing items with current price and info
+
+    // check updated stock
+    Set<CartRequest> itemsToCheck = cartMapper.toSetCartRequest(cartItemsMap);
+
+
+    AvailabilityResponse response = checkStock(itemsToCheck);
+    log.debug("availability response {}", response.updatedCart());
+    if (!response.allAvailable()) {
+      // update quantity for items out of stock
+      // removes item if available quantity is 0
+      Set<CartRequest> availableQuantities = response.updatedCart();
+      for (CartRequest request : availableQuantities) {
+        cart.updateQuantity(request.productId(), request.quantity());
+      }
+      isUpdated = true;
+      cartRepository.save(cart);
+    }
+
+    // returning only validated existing items with current price and available quantity
     List<CartItemDTO> cartItemDTOS = products.stream().map(p -> {
-      int quantity = cartItemsMap.get(p.productId()).getQuantity();
-      return new CartItemDTO(p, quantity);
+      CartItem item = cartItemsMap.get(p.productId());
+      int quantity = item != null ? item.getQuantity() : 0;
+      Boolean isAvailable = quantity > 0;
+      return new CartItemDTO(p, quantity, isAvailable);
     }).toList();
 
     return new CartResponse(cartItemDTOS, isUpdated);
+  }
+
+  /**
+   * Sends request to inventory that returns updated quantity if requested items is low or out of
+   * stock
+   */
+  private AvailabilityResponse checkStock(Set<CartRequest> requestedItems) {
+    if (requestedItems == null || requestedItems.isEmpty()) {
+      throw new IllegalStateException("Unable to process request");
+    }
+    try {
+      return inventoryClient.checkStock(new AvailabilityRequest(requestedItems));
+    } catch (RestClientException e) {
+      throw new InternalClientException("Unable to check stock in inventory.", e);
+    }
   }
 
   /**
@@ -83,11 +122,9 @@ public class CartService {
     log.debug("adding to cart. cartItems:{}", request);
     validateProduct(request.productId());
     UUID userId = extractUserId(jwt);
-    CartItem cartItem = cartMapper.toCartItem(request);
     Cart cart = fetchOrCreateCart(userId);
-    cart.addItem(cartItem);
+    cart.addItem(CartItem.create(request.productId(), request.quantity()));
     cartRepository.save(cart);
-
   }
 
   /**
@@ -135,7 +172,7 @@ public class CartService {
     // save only validated items to cart
     List<CartItem> itemsToMerge = requestedItems.stream().filter(
             i -> validatedProducts.contains(i.productId()))
-        .map(cartMapper::toCartItem).toList();
+        .map(i -> CartItem.create(i.productId(), i.quantity())).toList();
 
     cart.mergeCart(itemsToMerge);
     cartRepository.save(cart);
