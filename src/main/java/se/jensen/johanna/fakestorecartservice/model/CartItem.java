@@ -6,7 +6,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
-import se.jensen.johanna.fakestorecartservice.exception.IllegalCartStateException;
+import se.jensen.johanna.fakestorecartservice.exception.InvalidCartStateException;
 
 @Getter
 @Builder(access = AccessLevel.PRIVATE)
@@ -20,7 +20,7 @@ public class CartItem {
   public static CartItem create(UUID productId, int quantity) {
     validateQuantity(quantity);
     if (productId == null) {
-      throw new IllegalCartStateException("Missing product id.");
+      throw new InvalidCartStateException("Missing product id.");
     }
     return CartItem.builder().productId(productId).quantity(quantity).build();
 
@@ -33,7 +33,7 @@ public class CartItem {
 
   private static void validateQuantity(int quantity) {
     if (quantity < 0 || quantity > 100) {
-      throw new IllegalCartStateException("Quantity must be between 1-100.");
+      throw new InvalidCartStateException("Quantity must be between 1-100.");
     }
 
   }

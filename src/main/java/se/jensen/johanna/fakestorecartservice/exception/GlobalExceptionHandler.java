@@ -34,9 +34,10 @@ public class GlobalExceptionHandler {
 
   private HttpStatus getHttpStatus(ErrorCode errorCode) {
     return switch (errorCode) {
-      case ILLEGAL_CART_STATE -> HttpStatus.BAD_REQUEST;
-      case PRODUCT_NOT_FOUND -> HttpStatus.NOT_FOUND;
+      case INVALID_CART_STATE -> HttpStatus.BAD_REQUEST;
+      case PRODUCT_NOT_FOUND, CART_NOT_FOUND -> HttpStatus.NOT_FOUND;
       case INTERNAL_CLIENT_ERROR, INTERNAL_SERVER_ERROR -> HttpStatus.INTERNAL_SERVER_ERROR;
+      case LOW_STOCK -> HttpStatus.CONFLICT;
     };
   }
 

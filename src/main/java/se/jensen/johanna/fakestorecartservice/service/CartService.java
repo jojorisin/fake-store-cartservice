@@ -1,5 +1,6 @@
 package se.jensen.johanna.fakestorecartservice.service;
 
+import java.math.BigDecimal;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -19,11 +20,15 @@ import se.jensen.johanna.fakestorecartservice.dto.AvailabilityResponse;
 import se.jensen.johanna.fakestorecartservice.dto.CartItemDTO;
 import se.jensen.johanna.fakestorecartservice.dto.CartRequest;
 import se.jensen.johanna.fakestorecartservice.dto.CartResponse;
+import se.jensen.johanna.fakestorecartservice.dto.CheckoutCartItemDTO;
+import se.jensen.johanna.fakestorecartservice.dto.CheckoutCartResponse;
 import se.jensen.johanna.fakestorecartservice.dto.MergeRequest;
 import se.jensen.johanna.fakestorecartservice.dto.ProductBatchResponse;
 import se.jensen.johanna.fakestorecartservice.dto.ProductDTO;
+import se.jensen.johanna.fakestorecartservice.exception.CartNotFoundException;
 import se.jensen.johanna.fakestorecartservice.exception.InternalClientException;
-import se.jensen.johanna.fakestorecartservice.exception.ProductNotFound;
+import se.jensen.johanna.fakestorecartservice.exception.ProductNotFoundException;
+import se.jensen.johanna.fakestorecartservice.exception.StockException;
 import se.jensen.johanna.fakestorecartservice.mapper.CartMapper;
 import se.jensen.johanna.fakestorecartservice.model.Cart;
 import se.jensen.johanna.fakestorecartservice.model.CartItem;
@@ -74,7 +79,6 @@ public class CartService {
 
     // check updated stock
     Set<CartRequest> itemsToCheck = cartMapper.toSetCartRequest(cartItemsMap);
-
 
     AvailabilityResponse response = checkStock(itemsToCheck);
     log.debug("availability response {}", response.updatedCart());
@@ -138,7 +142,7 @@ public class CartService {
       throw new InternalClientException("Unable to process request", e);
     }
     if (productExists == null || !productExists) {
-      throw new ProductNotFound("Product not found.");
+      throw new ProductNotFoundException("Product not found.");
     }
 
   }
@@ -225,10 +229,48 @@ public class CartService {
     if (batchResponse.products().isEmpty()) {
       log.warn("Product service returned empty list when fetching cart cartItems. Product ids: {}",
           productIds);
-      throw new ProductNotFound("Products not found.");
+      throw new ProductNotFoundException("Products not found.");
     }
     return batchResponse.products();
 
+  }
+
+  /**
+   * Returns cart for checkout.
+   */
+  public CheckoutCartResponse getCartForCheckout(Jwt jwt) {
+    log.debug("fetching cart for checkout...");
+    UUID userId = extractUserId(jwt);
+    Cart cart = cartRepository.findById(userId).orElseThrow(() -> {
+          log.debug("cart not found for user when checking out.");
+          return new CartNotFoundException("Cart not found.");
+        }
+    );
+    Map<UUID, CartItem> cartItems = cart.getCartItemsMap();
+    if (cartItems.isEmpty()) {
+      log.debug("cart items are empty at checkout.");
+      throw new ProductNotFoundException("Your cart is empty.");
+    }
+
+    // get updated price and product info
+    Set<UUID> productIds = cartItems.keySet();
+    List<ProductDTO> productResponse = fetchProducts(productIds);
+    if (productIds.size() != productResponse.size()) {
+      throw new ProductNotFoundException("Some items in your cart are no longer available.");
+    }
+    // check inventory
+    Set<CartRequest> stockRequest = cartMapper.toSetCartRequest(cartItems);
+    AvailabilityResponse stockResponse = checkStock(stockRequest);
+    if (!stockResponse.allAvailable()) {
+      log.debug("not all items are available to checkout cart.");
+      throw new StockException("Some items in your cart have no or low stock.");
+    }
+    List<CheckoutCartItemDTO> itemsForCheckout = productResponse.stream()
+        .map(product -> cartMapper.toCheckoutCartItem(cartItems.get(product.productId()),
+            BigDecimal.valueOf(product.price()), product.title())).toList();
+    log.debug(itemsForCheckout.toString());
+
+    return new CheckoutCartResponse(itemsForCheckout);
   }
 
 
