@@ -11,7 +11,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.redis.core.RedisHash;
-import se.jensen.johanna.fakestorecartservice.exception.IllegalCartStateException;
+import se.jensen.johanna.fakestorecartservice.exception.InvalidCartStateException;
 
 @RedisHash(value = "cart", timeToLive = 604800)
 @Builder(access = AccessLevel.PRIVATE)
@@ -74,7 +74,7 @@ public class Cart {
         cartItemsMap.get(productId).getQuantity() : 0;
     int expectedTotal = getTotalQuantity() - existingQuantity + requestedQuantity;
     if (expectedTotal > 100) {
-      throw new IllegalCartStateException("You have exceeded 100 items in cart.");
+      throw new InvalidCartStateException("You have exceeded 100 items in cart.");
     }
 
   }
